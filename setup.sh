@@ -191,10 +191,16 @@ phase_agent() {
     fi
 
     # Aider — AI pair-programming assistant and Aider deps
+    # Installed in an isolated venv: aider-chat 0.x uses old setuptools incompatible
+    # with Python 3.13's removed pkgutil.ImpImporter; venv avoids system-Python conflicts.
+    local aider_venv="/opt/aider-venv"
     if ! command -v aider &>/dev/null; then
-        info "Installing aider-chat"
-        pip3 install --break-system-packages aider-chat
-        ok "aider installed"
+        info "Installing aider-chat in venv $aider_venv"
+        python3 -m venv "$aider_venv"
+        "$aider_venv/bin/pip" install --upgrade pip setuptools wheel --quiet
+        "$aider_venv/bin/pip" install aider-chat --quiet
+        ln -sf "$aider_venv/bin/aider" /usr/local/bin/aider
+        ok "aider installed: $(aider --version 2>/dev/null | head -1 || echo 'ok')"
     else
         ok "aider already installed: $(aider --version 2>/dev/null | head -1 || echo 'ok')"
     fi
