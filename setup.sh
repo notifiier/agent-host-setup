@@ -368,7 +368,7 @@ phase_verify() {
     _chkp "ollama: API responds on LAN ($lan_ip)"   "curl -sf http://${lan_ip}:11434/api/tags"
     _chkp "ollama: 127.0.0.1 NOT listening"         "! curl -sf --connect-timeout 2 http://127.0.0.1:11434/api/tags"
     local primary_name="${MODEL_PRIMARY%%:*}"
-    _chkp "ollama: primary model present"           "ollama list | grep -q '$primary_name'"
+    _chkp "ollama: primary model present"           "curl -sf http://${lan_ip}:11434/api/tags | grep -q '\"${primary_name}\"'"
 
     # Agent runtime
     _chk  "claude: installed"                       command -v claude
