@@ -127,35 +127,50 @@ phase_inference() {
     info "Binding Ollama endpoint to $lan_ip:11434"
 
     mkdir -p "$OLLAMA_OVERRIDE_DIR"
-    cat > "$OLLAMA_OVERRIDE_DIR/lan-bind.conf" <<EOF
-# Bind to LAN interface only.
-# Board decision NOT-114: no host firewall; LAN binding is the perimeter.
-[Service]
-Environment="OLLAMA_HOST=${lan_ip}:11434"
-Environment="OLLAMA_ORIGINS=*"
-EOF
-    systemctl daemon-reload
-    systemctl enable --now ollama
+    local override_conf="$OLLAMA_OVERRIDE_DIR/lan-bind.conf"
+    local new_conf
+    new_conf=$(printf '# Bind to LAN interface only.\n# Board decision NOT-114: no host firewall; LAN binding is the perimeter.\n[Service]\nEnvironment="OLLAMA_HOST=%s:11434"\nEnvironment="OLLAMA_ORIGINS=*"\n' "$lan_ip")
 
-    # Wait up to 30 s for the API to respond
+    local need_restart=0
+    if [[ ! -f "$override_conf" ]] || [[ "$(cat "$override_conf")" != "$new_conf" ]]; then
+        printf '%s\n' "$new_conf" > "$override_conf"
+        need_restart=1
+        info "Ollama override updated"
+    else
+        ok "Ollama override already current"
+    fi
+
+    systemctl daemon-reload
+    systemctl enable ollama
+
+    if [[ $need_restart -eq 1 ]] || ! systemctl is-active --quiet ollama; then
+        systemctl restart ollama
+        info "Ollama (re)started"
+    fi
+
+    # The service is bound to $lan_ip:11434 only (not loopback).
+    # Export OLLAMA_HOST so the local CLI connects to the same endpoint.
+    export OLLAMA_HOST="${lan_ip}:11434"
+
+    # Wait up to 60 s for the API to respond on the LAN interface
     local waited=0
-    until curl -sf "http://127.0.0.1:11434/api/tags" >/dev/null 2>&1; do
+    until curl -sf "http://${lan_ip}:11434/api/tags" >/dev/null 2>&1; do
         sleep 1; (( waited++ )) || true
-        [[ $waited -ge 30 ]] && die "Ollama did not respond within 30 s"
+        [[ $waited -ge 60 ]] && die "Ollama did not respond on ${lan_ip}:11434 within 60 s"
     done
     ok "Ollama running at $lan_ip:11434"
 
     info "Pulling primary model: $MODEL_PRIMARY"
-    ollama pull "$MODEL_PRIMARY" \
+    OLLAMA_HOST="${lan_ip}:11434" ollama pull "$MODEL_PRIMARY" \
         || warn "Failed to pull $MODEL_PRIMARY — check network / disk space"
 
     for m in "${MODELS_SECONDARY[@]}"; do
         info "Pulling secondary model: $m"
-        ollama pull "$m" || warn "Failed to pull $m (non-fatal)"
+        OLLAMA_HOST="${lan_ip}:11434" ollama pull "$m" || warn "Failed to pull $m (non-fatal)"
     done
 
     info "Pulling MoE stretch candidate: $MODEL_MOE (large download)"
-    ollama pull "$MODEL_MOE" || warn "Failed to pull $MODEL_MOE (non-fatal; stretch model)"
+    OLLAMA_HOST="${lan_ip}:11434" ollama pull "$MODEL_MOE" || warn "Failed to pull $MODEL_MOE (non-fatal; stretch model)"
 
     ok "inference phase done"
 }
@@ -331,8 +346,8 @@ phase_verify() {
 
     # Inference
     _chk  "ollama: service active"                  systemctl is-active --quiet ollama
-    _chkp "ollama: API responds (127.0.0.1)"        "curl -sf http://127.0.0.1:11434/api/tags"
-    _chkp "ollama: LAN endpoint ($lan_ip)"          "curl -sf http://${lan_ip}:11434/api/tags"
+    _chkp "ollama: API responds on LAN ($lan_ip)"   "curl -sf http://${lan_ip}:11434/api/tags"
+    _chkp "ollama: 127.0.0.1 NOT listening"         "! curl -sf --connect-timeout 2 http://127.0.0.1:11434/api/tags"
     local primary_name="${MODEL_PRIMARY%%:*}"
     _chkp "ollama: primary model present"           "ollama list | grep -q '$primary_name'"
 
@@ -361,7 +376,7 @@ phase_verify() {
         info "Sending short prompt, requesting 50-token decode…"
 
         local bm_resp
-        bm_resp=$(curl -sf http://127.0.0.1:11434/api/generate \
+        bm_resp=$(curl -sf "http://${lan_ip}:11434/api/generate" \
             -H "Content-Type: application/json" \
             -d "{\"model\":\"$MODEL_PRIMARY\",\"prompt\":\"The quick brown fox\",
                  \"stream\":false,\"options\":{\"num_predict\":50}}" 2>/dev/null) \
