@@ -77,7 +77,7 @@ phase_base() {
     info "Installing base packages"
     DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
         build-essential git curl wget ca-certificates gnupg \
-        python3 python3-pip python3-venv python3-dev \
+        python3 python3-pip python3-venv python3-dev python3-setuptools python3-wheel \
         tmux vim nano htop lsof net-tools bc jq \
         unattended-upgrades apt-listchanges \
         zram-tools
