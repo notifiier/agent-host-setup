@@ -200,13 +200,16 @@ phase_agent() {
         fi
         local uv_bin
         uv_bin=$(command -v uv || echo "/root/.local/bin/uv")
-        # Pin numpy>=2: aider allows <2.2; numpy 2.x has Python 3.13 wheels (1.26.x needs source build)
-        "$uv_bin" tool install 'aider-chat' --with 'numpy>=2,<2.2'
+        # numpy>=2 has Python 3.13 wheels; audioop-lts backports audioop removed in Python 3.13
+        "$uv_bin" tool install 'aider-chat' --with 'audioop-lts'
         # uv installs tools into ~/.local/bin; add to PATH or symlink
         local aider_bin
         aider_bin=$(find /root/.local/bin /root/.cargo/bin -name aider 2>/dev/null | head -1)
         if [[ -n "$aider_bin" ]]; then
             ln -sf "$aider_bin" /usr/local/bin/aider
+            # Allow non-root users to traverse into the uv tool venv
+            chmod 711 /root
+            chmod -R a+rX /root/.local/share/uv/tools 2>/dev/null || true
             ok "aider installed: $(aider --version 2>/dev/null | head -1 || echo 'ok')"
         else
             warn "aider binary not found after uv install — check /root/.local/bin"
