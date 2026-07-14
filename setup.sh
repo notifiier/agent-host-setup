@@ -190,17 +190,26 @@ phase_agent() {
         ok "claude already installed: $(claude --version 2>/dev/null || echo 'ok')"
     fi
 
-    # Aider — AI pair-programming assistant and Aider deps
-    # Installed in an isolated venv: aider-chat 0.x uses old setuptools incompatible
-    # with Python 3.13's removed pkgutil.ImpImporter; venv avoids system-Python conflicts.
-    local aider_venv="/opt/aider-venv"
+    # Aider — AI pair-programming assistant
+    # Use uv tool install: uv picks the latest aider-chat compatible with the active Python,
+    # avoiding the setuptools/pkgutil.ImpImporter incompatibility on Python 3.13.
     if ! command -v aider &>/dev/null; then
-        info "Installing aider-chat in venv $aider_venv"
-        python3 -m venv "$aider_venv"
-        "$aider_venv/bin/pip" install --upgrade pip setuptools wheel --quiet
-        "$aider_venv/bin/pip" install aider-chat --quiet
-        ln -sf "$aider_venv/bin/aider" /usr/local/bin/aider
-        ok "aider installed: $(aider --version 2>/dev/null | head -1 || echo 'ok')"
+        info "Installing uv (if needed) and aider-chat"
+        if ! command -v uv &>/dev/null; then
+            curl -LsSf https://astral.sh/uv/install.sh | env HOME=/root sh
+        fi
+        local uv_bin
+        uv_bin=$(command -v uv || echo "/root/.local/bin/uv")
+        "$uv_bin" tool install aider-chat
+        # uv installs tools into ~/.local/bin; add to PATH or symlink
+        local aider_bin
+        aider_bin=$(find /root/.local/bin /root/.cargo/bin -name aider 2>/dev/null | head -1)
+        if [[ -n "$aider_bin" ]]; then
+            ln -sf "$aider_bin" /usr/local/bin/aider
+            ok "aider installed: $(aider --version 2>/dev/null | head -1 || echo 'ok')"
+        else
+            warn "aider binary not found after uv install — check /root/.local/bin"
+        fi
     else
         ok "aider already installed: $(aider --version 2>/dev/null | head -1 || echo 'ok')"
     fi
