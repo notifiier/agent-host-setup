@@ -49,7 +49,7 @@ else
 fi
 
 _ts()     { date '+%Y-%m-%d %H:%M:%S'; }
-_log()    { echo -e "[$(_ts)] [$1] $2" | tee -a "$LOG_FILE"; }
+_log()    { mkdir -p "$LOG_DIR" 2>/dev/null || true; echo -e "[$(_ts)] [$1] $2" | tee -a "$LOG_FILE"; }
 info()    { _log "INFO " "${C_BLUE}$*${C_RESET}"; }
 ok()      { _log "OK   " "${C_GREEN}$*${C_RESET}"; }
 warn()    { _log "WARN " "${C_YELLOW}$*${C_RESET}"; }
@@ -431,6 +431,11 @@ USAGE
 }
 
 main() {
+    # Handle --help before root check so it's readable without sudo
+    for arg in "$@"; do
+        [[ "$arg" == "--help" || "$arg" == "-h" ]] && { usage; exit 0; }
+    done
+
     require_root "$@"
     mkdir -p "$LOG_DIR" "$STATE_DIR"
     _log "INFO " "agent-host-setup v$SCRIPT_VERSION — args: $*"
