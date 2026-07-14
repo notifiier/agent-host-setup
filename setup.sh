@@ -200,7 +200,8 @@ phase_agent() {
         fi
         local uv_bin
         uv_bin=$(command -v uv || echo "/root/.local/bin/uv")
-        "$uv_bin" tool install aider-chat
+        # Pin numpy>=2: aider allows <2.2; numpy 2.x has Python 3.13 wheels (1.26.x needs source build)
+        "$uv_bin" tool install 'aider-chat' --with 'numpy>=2,<2.2'
         # uv installs tools into ~/.local/bin; add to PATH or symlink
         local aider_bin
         aider_bin=$(find /root/.local/bin /root/.cargo/bin -name aider 2>/dev/null | head -1)
